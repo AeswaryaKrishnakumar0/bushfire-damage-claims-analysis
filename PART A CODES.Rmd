@@ -1,0 +1,371 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r warning=FALSE}
+library(melt)
+library(reshape2)
+library(psych)
+library(ggplot2)
+library(tree)
+```
+
+
+# Question 2: Data Pre-processing Steps
+
+# Load the dataset
+```{r}
+bushfire <- read.csv("BushFireData.csv")
+```
+# Check the structure of the dataset to identify data types
+```{r}
+str(bushfire)
+```
+# Remove rows with missing values to ensure a clean dataset for analysis
+```{r}
+bushfire <- na.omit(bushfire)
+```
+
+# Convert categorical variables (Construction Quality and Insurance Coverage) to factors
+```{r}
+bushfire$Construction_Quality <- as.factor(bushfire$Construction_Quality)
+```
+
+```{r}
+bushfire$Insurance_Coverage <- as.factor(bushfire$Insurance_Coverage)
+```
+
+# Set a seed for reproducibility and create a 70-30 train-test split
+```{r}
+set.seed(1)
+```
+
+```{r}
+tr.id = sample(1:nrow(bushfire), round(nrow(bushfire) * 0.7, 0))
+```
+
+# Define the training data (70% of the dataset) and testing data (remaining 30%)
+```{r}
+training_data = bushfire[tr.id, ]  # Training data
+testing_data = bushfire[-tr.id, ]  # Test data
+```
+
+# Check the dimensions of the training and testing datasets to confirm the split
+```{r}
+dim(training_data)
+dim(testing_data)
+```
+
+# Display the structure of the training dataset after pre-processing
+```{r}
+str(training_data)
+```
+# QUESTION 3
+
+#Distribution of Fire Intensity
+```{r}
+hist(bushfire$Fire_Intensity, main = "Distribution of Fire Intensity", xlab = "Fire Intensity (kW/m)", col = "#008080")
+
+```
+
+
+```{r}
+hist(bushfire$Distance_from_Fire, main = "Distribution of Distance from Fire", xlab = "Distance from Fire (km)", col = "#008080")
+```
+
+
+```{r}
+hist(bushfire$Property_Value, main = "Distribution of Property Value", xlab = "Property Value (x 10^5 AUD)", col = "#008080")
+
+```
+
+
+```{r}
+hist(bushfire$Damage_Claims, main = "Distribution of Damage Claims", xlab = "Damage Claims (x 10^5 AUD)", col = "#008080")
+```
+
+#2 bar plots
+```{r}
+barplot(table(bushfire$Construction_Quality), main = "Construction Quality Distribution", xlab = "Construction Quality", col = c("red", "green"))
+
+```
+
+
+```{r}
+barplot(table(bushfire$Insurance_Coverage), main = "Insurance Coverage Distribution", xlab = "Insurance Coverage", col = c("red", "green", "pink"))
+```
+
+# boxplots
+```{r}
+boxplot(Damage_Claims ~ Construction_Quality, data = bushfire, 
+        main = "Damage Claims by Construction Quality", 
+        xlab = "Construction Quality", ylab = "Damage Claims (x 10^5 AUD)", col = "#008080")
+```
+
+
+```{r}
+boxplot(Damage_Claims ~ Insurance_Coverage, data = bushfire, 
+        main = "Damage Claims by Insurance Coverage", 
+        xlab = "Insurance Coverage", ylab = "Damage Claims (x 10^5 AUD)", col = "#008080")
+```
+# Scatter Plots
+
+```{r}
+plot(bushfire$Fire_Intensity, bushfire$Damage_Claims, 
+     main = "Damage Claims vs Fire Intensity", 
+     xlab = "Fire Intensity (kW/m)", ylab = "Damage Claims (x 10^5 AUD)", pch = 20, col = "#008080")
+```
+
+
+```{r}
+plot(bushfire$Distance_from_Fire, bushfire$Damage_Claims, 
+     main = "Damage Claims vs Distance from Fire", 
+     xlab = "Distance from Fire (km)", ylab = "Damage Claims (x 10^5 AUD)", col = "#008080" )
+```
+
+
+```{r}
+# Select only continuous variables
+continuous_vars <- bushfire[, sapply(bushfire, is.numeric)]
+cor_matrix <- cor(continuous_vars, use = "complete.obs")
+print(cor_matrix)
+```
+```{r}
+cor_matrix <- cor(continuous_vars, use = "complete.obs")
+melted_cor_matrix <- melt(cor_matrix)
+```
+
+```{r}
+ggplot(data = melted_cor_matrix, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1, 1), space = "Lab", 
+                       name = "Correlation") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  coord_fixed()
+```
+
+
+# QUESTION 4
+
+#Initial Model Building
+
+```{r}
+initial_model <- lm(Damage_Claims ~ Fire_Intensity + Distance_from_Fire + 
+                      Building_Age + Property_Value + Population_Density + 
+                      Emergency_Response_Time + Mitigation_Measures + 
+                      Wind_Speed + Humidity, data=training_data)
+```
+
+
+```{r}
+summary(initial_model)
+```
+# Model Improvement
+```{r}
+interaction_model <- lm(Damage_Claims ~ Fire_Intensity * Distance_from_Fire
++ Building_Age + Property_Value + Population_Density + Emergency_Response_Time + Mitigation_Measures + Wind_Speed + Humidity, data=training_data)
+```
+
+```{r}
+summary(interaction_model)
+```
+
+# Polynomial model
+```{r}
+polynomial_model <- lm(Damage_Claims ~ poly(Fire_Intensity, 2) + Distance_from_Fire +  Building_Age + Property_Value + Population_Density + 
+Emergency_Response_Time + Mitigation_Measures + Wind_Speed + Humidity, data=training_data)
+```
+
+```{r}
+summary(polynomial_model)
+```
+# Variable Selection Using Stepwise Regression
+```{r}
+library(MASS)
+optimized_model <- stepAIC(initial_model, direction="both")
+summary(optimized_model)
+```
+```{r}
+plot(optimized_model)
+```
+
+# Model Evaluation with RMSE
+
+```{r}
+predictions <- predict(optimized_model, testing_data)
+rmse <- sqrt(mean((testing_data$Damage_Claims - predictions)^2))
+rmse
+```
+
+
+# QUESTION 5
+```{r}
+final_model <- lm(Damage_Claims ~ Fire_Intensity + Distance_from_Fire + Property_Value + Emergency_Response_Time + Mitigation_Measures + Humidity, data = training_data)
+
+summary(final_model)
+```
+
+
+```{r}
+predictions <- predict(final_model, testing_data)
+final_rmse <- sqrt(mean((testing_data$Damage_Claims - predictions)^2))
+cat("Final Model RMSE:", final_rmse, "\n")
+```
+# QUESTION 7
+# Model building
+```{r warning=FALSE}
+tree_train <- tree(Damage_Claims~.,training_data)
+
+```
+
+
+```{r}
+plot(tree_train)
+text(tree_train, pretty = 0)
+```
+
+
+```{r}
+summary(tree_train)
+```
+
+```{r warning=FALSE}
+set.seed(12)
+cv_regtree <- cv.tree(tree_train)
+```
+
+
+```{r}
+cv_regtree
+```
+
+
+```{r}
+
+plot(cv_regtree$size, cv_regtree$dev, type = "b" )
+```
+
+
+#Prune the best model with the lowest "dev"
+```{r warning=FALSE}
+# Prune to size 15 for minimal deviance
+pruned_tree_9 <- prune.tree(tree_train, best = 9)
+predictions_9 <- predict(pruned_tree_9, testing_data)
+```
+
+#Check the model Accuracy
+```{r warning=FALSE}
+MSE_9 <- mean((testing_data$Damage_Claims - predictions_9)^2)
+RMSE_9 <- sqrt(MSE_9)
+RMSE_9
+```
+
+# Plot the best model Regression Tree
+```{r}
+pruned_tree_9
+```
+```{r}
+plot(pruned_tree_9)
+text(pruned_tree_9, pretty = 0)
+```
+
+```{r}
+plot(predictions_9, testing_data$Damage_Claims)
+abline(0, 1)
+```
+
+# Lets check if the model is biased.
+Residuals should be randomly scattered around zero; patterns may suggest areas where the model struggles.
+```{r}
+residuals <- testing_data$Damage_Claims - predictions_9
+plot(predictions_9, 
+     residuals, xlab = "Predicted", ylab = "Residuals", main = "Residual Plot")
+abline(h = 0, col = "red")
+
+```
+
+
+# QUESTION 8
+The model is size with 9;
+```{r}
+MSE <- mean((testing_data$Damage_Claims - predictions_9)^2)
+RMSE <- sqrt(MSE_9)
+RMSE
+```
+
+# Terninal Nodes:
+```{r}
+pruned_tree_9
+```
+
+# Interpretting the model with size 9 
+```{r}
+plot(pruned_tree_9)
+text(pruned_tree_9, pretty = 0)
+```
+
+# QUESTION 9
+# Best model for regression
+```{r}
+summary(final_model)
+```
+
+# Best model for Tree
+```{r}
+summary(pruned_tree_9)
+
+```
+
+
+# Check the model Performance of both models 
+```{r}
+LinearModel <- predict(final_model, testing_data)
+linearMSE <-  mean((testing_data$Damage_Claims - LinearModel)^2)
+linearRMSE <- sqrt(linearMSE)
+linearRMSE
+```
+
+# Tree RMSE
+```{r}
+RMSE
+```
+# Linear Regression Plot
+```{r}
+plot(testing_data$Damage_Claims, LinearModel, main = "Linear Regression: Actual vs Predicted",
+     xlab = "Actual Damage Claims", ylab = "Predicted Damage Claims", col = "blue", pch = 19)
+abline(0, 1, col = "red")  # 45-degree line
+```
+# Pruned Tree Model Plot
+```{r}
+plot(testing_data$Damage_Claims, predictions_9, main = "Pruned Tree: Actual vs Predicted",
+     xlab = "Actual Damage Claims", ylab = "Predicted Damage Claims", col = "brown", pch = 19)
+abline(0, 1, col = "red")  # 45-degree line
+
+```
+
+
+#QUESTION 10
+# Create the new binary target variable for classification
+# 'NewDamageClaims' is 1 if 'Damage_Claims' is greater than 7.5, otherwise it's 0
+```{r}
+bushfire$NewDamageClaims <- ifelse(bushfire$Damage_Claims > 7.5, 1, 0)
+```
+
+# Remove unnecessary variables
+```{r}
+head(bushfire$NewDamageClaims)
+```
+
+```{r}
+str(bushfire)
+```
+
+
+
+
+
